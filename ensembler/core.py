@@ -595,6 +595,35 @@ def find_loopmodel_executable():
                 return os.path.join(path, filename)
     raise Exception('Loopmodel executable not found in PATH')
 
+def find_partial_thread_executable():
+    for path in os.environ['PATH'].split(os.pathsep):
+        if not os.path.exists(path):
+            continue
+        path = path.strip('"')
+        for filename in os.listdir(path):
+            if len(filename) >= 10 and filename[0: 15] == 'partial_thread.':
+                if filename[-5:] == 'debug':
+                    warnings.warn(
+                        'partial_thread debug version ({0}) will be ignored, as it runs extremely slowly'.format(filename)
+                    )
+                    continue
+                return os.path.join(path, filename)
+    raise Exception('partial_thread executable not found in PATH')
+    
+def find_rosetta_scripts_executable():
+    for path in os.environ['PATH'].split(os.pathsep):
+        if not os.path.exists(path):
+            continue
+        path = path.strip('"')
+        for filename in os.listdir(path):
+            if len(filename) >= 10 and filename[0: 16] == 'rosetta_scripts.':
+                if filename[-5:] == 'debug':
+                    warnings.warn(
+                        'rosetta_scripts debug version ({0}) will be ignored, as it runs extremely slowly'.format(filename)
+                    )
+                    continue
+                return os.path.join(path, filename)
+    raise Exception('rosetta_scripts executable not found in PATH')
 
 def check_ensembler_modeling_stage_first_model_file_exists(ensembler_stage, targetid):
     models_target_dir = os.path.join(default_project_dirnames.models, targetid)
