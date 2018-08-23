@@ -494,6 +494,7 @@ def build_models(process_only_these_targets=None, process_only_these_templates=N
         write_build_models_metadata(target, target_setup_data, process_only_these_targets,
                                     process_only_these_templates, model_seqid_cutoff,
                                     write_modeller_restraints_file)
+        break
 
 
 def build_model(target, template_resolved_seq, target_setup_data,
@@ -559,11 +560,14 @@ def build_model(target, template_resolved_seq, target_setup_data,
         % (target.id, template.id)
     )
 
-    # aln = align_target_template(target, template)
+    aln = align_target_template(target, template)
     aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.pir'))
     # write_modeller_pir_aln_file(aln, target, template, pir_aln_filepath=aln_filepath)
+    write_rosetta_grishin_aln_file(aln, target, template, pir_aln_filepath='alignment.ros')
     log_file = init_build_model_logfile(modeling_log_filepath)
-
+    run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
+                             template_structure_dir, n_ouputmodels = 1)
+'''
     with ensembler.utils.enter_temp_dir():
         try:
             start = datetime.datetime.utcnow()
@@ -578,7 +582,7 @@ def build_model(target, template_resolved_seq, target_setup_data,
 
         except Exception as e:
             end_exception_build_model_logfile(e, log_file)
-
+'''
 
 def get_modeller_version():
     """Hacky attempt to get Modeller version by regex searching the installation directory or README file.
@@ -703,6 +707,56 @@ def write_modeller_pir_aln_file(aln, target, template, pir_aln_filepath='alignme
     with open(pir_aln_filepath, 'w') as outfile:
         outfile.write(contents)
 
+def write_rosetta_grishin_aln_file(aln, target, template, pir_aln_filepath='alignment.ros'):
+    contents = "## {0} {1} \n# \nscores_from_program: 0 \n".format(target.id, template.id)
+    contents += '0 ' + aln[0][0] + '\n' + '0 ' + aln[0][0] + '\n--\n' 
+    with open(pir_aln_filepath, 'w') as outfile:
+        outfile.write(contents)
+
+def write_rosettaCM_flags(flag_fn, fasta_fn, xml_fn, silent_fn):
+    flag_file=open(flag_fn,'w')
+    flag_file.write("# i/o\n")
+    flag_file.write("-in:file:fasta %s\n"%fasta_fn)
+    flag_file.write("-nstruct 20\n")
+    flag_file.write("-parser:protocol %s\n\n"%xml_fn)
+    flag_file.write("# relax options\n")
+    flag_file.write("-relax:dualspace\n")
+    flag_file.write("-relax:jump_move true\n")
+    flag_file.write("-default_max_cycles 200\n")
+    flag_file.write("-beta_cart\n")
+    flag_file.write("-hybridize:stage1_probability 1.0\n") 
+
+def write_resettaCM_xml(fn, template_filenames):
+    xml_file=open(fn,'w')
+    xml_file.write("<ROSETTASCRIPTS>\n")
+    xml_file.write("    <TASKOPERATIONS>\n")
+    xml_file.write("    </TASKOPERATIONS>\n")
+    xml_file.write("    <SCOREFXNS>\n")
+    xml_file.write("        <ScoreFunction name=\"stage1\" weights=\"score3\" symmetric=\"0\">\n")
+    xml_file.write("            <Reweight scoretype=\"atom_pair_constraint\" weight=\"0.1\"/>\n")
+    xml_file.write("        </ScoreFunction>\n")
+    xml_file.write("        <ScoreFunction name=\"stage2\" weights=\"score4_smooth_cart\" symmetric=\"0\">\n")
+    xml_file.write("            <Reweight scoretype=\"atom_pair_constraint\" weight=\"0.1\"/>\n")
+    xml_file.write("        </ScoreFunction>\n")
+    xml_file.write("        <ScoreFunction name=\"fullatom\" weights=\"beta_cart\" symmetric=\"0\">\n")
+    xml_file.write("            <Reweight scoretype=\"atom_pair_constraint\" weight=\"0.1\"/>\n")
+    xml_file.write("        </ScoreFunction>\n")
+    xml_file.write("    </SCOREFXNS>\n")
+    xml_file.write("    <FILTERS>\n")
+    xml_file.write("    </FILTERS>\n")
+    xml_file.write("    <MOVERS>\n")
+    xml_file.write("        <Hybridize name=\"hybridize\" stage1_scorefxn=\"stage1\" stage2_scorefxn=\"stage2\" fa_scorefxn=\"fullatom\" batch=\"1\" stage1_increase_cycles=\"1.0\" stage2_increase_cycles=\"1.0\">\n")
+    for tmpl in template_filenames:
+        xml_file.write("            <Template pdb=\"%s\" cst_file=\"AUTO\" weight=\"1.0\" />\n"%(tmpl))
+    xml_file.write("        </Hybridize>\n")
+    xml_file.write("    </MOVERS>\n")
+    xml_file.write("    <APPLY_TO_POSE>\n")
+    xml_file.write("    </APPLY_TO_POSE>\n")
+    xml_file.write("    <PROTOCOLS>\n")
+    xml_file.write("        <Add mover=\"hybridize\"/>\n")
+    xml_file.write("    </PROTOCOLS>\n")
+    xml_file.write("</ROSETTASCRIPTS>\n")
+    xml_file.close()
 
 def run_modeller(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
                  template_structure_dir, aln_filepath='alignment.pir',
@@ -721,6 +775,26 @@ def run_modeller(target, template, model_dir, model_pdbfilepath, model_pdbfilepa
     save_modeller_output_files(target, model_dir, a, env, model_pdbfilepath,
                                model_pdbfilepath_uncompressed,
                                write_modeller_restraints_file=write_modeller_restraints_file)
+
+def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
+                 template_structure_dir, n_ouputmodels = 1):
+    partial_thread_excutable = ensembler.core.find_partial_thread_executable()
+    target_fasta_filepath = os.path.abspath(os.path.join(ensembler.core.default_project_dirnames.targets, 'targets.fa'))
+    aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.ros'))
+    minirosetta_database_path = os.environ.get('MINIROSETTA_DATABASE') 
+    template_filepath = os.path.abspath(os.path.join(template_structure_dir, template.id+'.pdb'))
+    command = "%s -database %s -mute all -in:file:fasta %s -in:file:alignment %s -in:file:template_pdb %s -ignore_unrecognized_res"%(partial_thread_excutable, minirosetta_database_path, target_fasta_filepath, aln_filepath, template_filepath)
+    output_text = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True).wait()
+
+    thread_fullnames = [ template_filepath ] 
+    flag_fn = os.path.abspath(os.path.join(model_dir, 'flags'))
+    xml_fn = os.path.abspath(os.path.join(model_dir, 'rosetta_cm.xml'))
+    silent_out = os.path.abspath(os.path.join(model_dir, 'rosetta_cm.silent'))
+    write_rosettaCM_flags(flag_fn, target_fasta_filepath, xml_fn, silent_out)
+    write_resettaCM_xml(xml_fn, thread_fullnames)
+    rosetta_script_excutable = ensembler.core.find_rosetta_scripts_executable()
+    command="%s @%s -database %s -nstruct 1"%(rosetta_script_excutable, flag_fn, minirosetta_database_path) 
+    output_text = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True).wait()
 
 
 def save_modeller_output_files(target, model_dir, a, env, model_pdbfilepath,
