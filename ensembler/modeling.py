@@ -494,7 +494,6 @@ def build_models(process_only_these_targets=None, process_only_these_templates=N
         write_build_models_metadata(target, target_setup_data, process_only_these_targets,
                                     process_only_these_templates, model_seqid_cutoff,
                                     write_modeller_restraints_file)
-        break
 
 
 def build_model(target, template_resolved_seq, target_setup_data,
@@ -561,12 +560,15 @@ def build_model(target, template_resolved_seq, target_setup_data,
     )
 
     aln = align_target_template(target, template)
-    aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.pir'))
+#     aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.pir'))
     # write_modeller_pir_aln_file(aln, target, template, pir_aln_filepath=aln_filepath)
-    write_rosetta_grishin_aln_file(aln, target, template, pir_aln_filepath='alignment.ros')
+    aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.ros'))
+    write_rosetta_grishin_aln_file(aln, target, template, pir_aln_filepath=aln_filepath)
     log_file = init_build_model_logfile(modeling_log_filepath)
     run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
                              template_structure_dir, n_ouputmodels = 1)
+    logger.info('rosetta done. \n')
+    end_successful_build_model_logfile(log_file, start)
 '''
     with ensembler.utils.enter_temp_dir():
         try:
@@ -783,10 +785,19 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.ros'))
     minirosetta_database_path = os.environ.get('MINIROSETTA_DATABASE') 
     template_filepath = os.path.abspath(os.path.join(template_structure_dir, template.id+'.pdb'))
+    cwd = os.getcwd()
+    os.chdir(model_dir)
     command = "%s -database %s -mute all -in:file:fasta %s -in:file:alignment %s -in:file:template_pdb %s -ignore_unrecognized_res"%(partial_thread_excutable, minirosetta_database_path, target_fasta_filepath, aln_filepath, template_filepath)
-    output_text = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True).wait()
-
-    thread_fullnames = [ template_filepath ] 
+    print command
+    partial_threading = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    partial_threading.wait()
+    thread_filepath = os.path.abspath(os.path.join(model_dir, template.id+'.pdb'))
+    if os.path.exists(thread_filepath): 
+        thread_fullnames = [ thread_filepath ] 
+    else: 
+        logger.error('Recheck the partial threading process in Rosetta.')
+    print 'done partial threading.'
+    thread_fullnames = [ thread_filepath ] 
     flag_fn = os.path.abspath(os.path.join(model_dir, 'flags'))
     xml_fn = os.path.abspath(os.path.join(model_dir, 'rosetta_cm.xml'))
     silent_out = os.path.abspath(os.path.join(model_dir, 'rosetta_cm.silent'))
@@ -794,8 +805,13 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     write_resettaCM_xml(xml_fn, thread_fullnames)
     rosetta_script_excutable = ensembler.core.find_rosetta_scripts_executable()
     command="%s @%s -database %s -nstruct 1"%(rosetta_script_excutable, flag_fn, minirosetta_database_path) 
-    output_text = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True).wait()
-
+    print command
+    rosetta_script = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+#    for line in iter(rosetta_script.stdout.readline, b''): 
+#        print(">>> " + line.rstrip())
+    rosetta_script.wait()
+    print 'done scripts'
+    os.chdir(cwd)
 
 def save_modeller_output_files(target, model_dir, a, env, model_pdbfilepath,
                                model_pdbfilepath_uncompressed,
