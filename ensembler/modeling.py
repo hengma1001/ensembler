@@ -567,7 +567,7 @@ def build_model(target, template_resolved_seq, target_setup_data,
     log_file = init_build_model_logfile(modeling_log_filepath)
     run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
                              template_structure_dir, n_ouputmodels = 1)
-    logger.info('rosetta done. \n')
+    start = datetime.datetime.utcnow()
     end_successful_build_model_logfile(log_file, start)
 '''
     with ensembler.utils.enter_temp_dir():
@@ -780,6 +780,7 @@ def run_modeller(target, template, model_dir, model_pdbfilepath, model_pdbfilepa
 
 def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilepath_uncompressed,
                  template_structure_dir, n_ouputmodels = 1):
+    rosetta_output = open(os.path.abspath(os.path.join(model_dir, 'rosetta_cm.out')), 'w')
     partial_thread_excutable = ensembler.core.find_partial_thread_executable()
     target_fasta_filepath = os.path.abspath(os.path.join(ensembler.core.default_project_dirnames.targets, 'targets.fa'))
     aln_filepath = os.path.abspath(os.path.join(model_dir, 'alignment.ros'))
@@ -788,7 +789,7 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     cwd = os.getcwd()
     os.chdir(model_dir)
     command = "%s -database %s -mute all -in:file:fasta %s -in:file:alignment %s -in:file:template_pdb %s -ignore_unrecognized_res"%(partial_thread_excutable, minirosetta_database_path, target_fasta_filepath, aln_filepath, template_filepath)
-    print command
+    rosetta_output.write(command, '\n')
     partial_threading = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     partial_threading.wait()
     thread_filepath = os.path.abspath(os.path.join(model_dir, template.id+'.pdb'))
@@ -796,7 +797,7 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
         thread_fullnames = [ thread_filepath ] 
     else: 
         logger.error('Recheck the partial threading process in Rosetta.')
-    print 'done partial threading.'
+    rosetta_output.write('done partial threading.\n')
     thread_fullnames = [ thread_filepath ] 
     flag_fn = os.path.abspath(os.path.join(model_dir, 'flags'))
     xml_fn = os.path.abspath(os.path.join(model_dir, 'rosetta_cm.xml'))
@@ -805,12 +806,12 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     write_resettaCM_xml(xml_fn, thread_fullnames)
     rosetta_script_excutable = ensembler.core.find_rosetta_scripts_executable()
     command="%s @%s -database %s -nstruct 1"%(rosetta_script_excutable, flag_fn, minirosetta_database_path) 
-    print command
-    rosetta_script = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    rosetta_output.write(command, '\n')
+    rosetta_script = subprocess.Popen(command, stdout=rosetta_output, stderr=subprocess.STDOUT, shell=True)
 #    for line in iter(rosetta_script.stdout.readline, b''): 
 #        print(">>> " + line.rstrip())
     rosetta_script.wait()
-    print 'done scripts'
+    rosetta_output.write('\ndone rosetta scripts--hybridize mover.\n')
     os.chdir(cwd)
 
 def save_modeller_output_files(target, model_dir, a, env, model_pdbfilepath,
