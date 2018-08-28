@@ -789,7 +789,7 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     cwd = os.getcwd()
     os.chdir(model_dir)
     command = "%s -database %s -mute all -in:file:fasta %s -in:file:alignment %s -in:file:template_pdb %s -ignore_unrecognized_res"%(partial_thread_excutable, minirosetta_database_path, target_fasta_filepath, aln_filepath, template_filepath)
-    rosetta_output.write(command, '\n')
+    rosetta_output.write(command + '\n')
     partial_threading = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     partial_threading.wait()
     thread_filepath = os.path.abspath(os.path.join(model_dir, template.id+'.pdb'))
@@ -806,7 +806,7 @@ def run_rosettaCM(target, template, model_dir, model_pdbfilepath, model_pdbfilep
     write_resettaCM_xml(xml_fn, thread_fullnames)
     rosetta_script_excutable = ensembler.core.find_rosetta_scripts_executable()
     command="%s @%s -database %s -nstruct 1"%(rosetta_script_excutable, flag_fn, minirosetta_database_path) 
-    rosetta_output.write(command, '\n')
+    rosetta_output.write(command + '\n')
     rosetta_script = subprocess.Popen(command, stdout=rosetta_output, stderr=subprocess.STDOUT, shell=True)
 #    for line in iter(rosetta_script.stdout.readline, b''): 
 #        print(">>> " + line.rstrip())
