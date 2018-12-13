@@ -187,6 +187,7 @@ def refine_implicit_md(
     # Process targets
     print('Processing targets...') # DEBUG
     for target in targets:
+        print process_only_these_targets
         if (process_only_these_targets is not None) and (target.id not in process_only_these_targets):
             print('Skipping because %s is not in process_only_these_targets' % target.id)
             print(process_only_these_targets)
